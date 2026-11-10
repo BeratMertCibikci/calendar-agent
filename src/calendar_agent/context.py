@@ -18,6 +18,7 @@ class Context:
     config: Config
     store: Store
     calendar: Any  # a CalendarBackend, see calendar_backends.py
+    mail: Any = None  # a MailBackend (see mail_backends.py) or None when mail is disabled
     search: Optional[Callable[[str], list[dict]]] = None  # web search, injectable for tests
     clock: Optional[Callable[[], datetime]] = None
 

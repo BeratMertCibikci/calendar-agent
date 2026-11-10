@@ -27,6 +27,7 @@ from .context import Context, init_context
 from .db import Store
 from .engines import BaseEngine, build_engine
 from .errors import EngineUnavailable
+from .mail_backends import build_mail
 from .registry import registry, session_scope
 
 log = logging.getLogger("calendar_agent.server")
@@ -68,13 +69,15 @@ def create_app(
     engine: Optional[BaseEngine] = None,
     store: Optional[Store] = None,
     calendar=None,
+    mail=None,
     search: Optional[Callable] = None,
     clock: Optional[Callable] = None,
 ) -> Flask:
     config = config or Config.from_env()
     store = store or Store(config.db_path, action_ttl=config.action_ttl_seconds)
     calendar = calendar or build_calendar(config)
-    init_context(Context(config=config, store=store, calendar=calendar, search=search, clock=clock))
+    mail = mail if mail is not None else build_mail(config)
+    init_context(Context(config=config, store=store, calendar=calendar, mail=mail, search=search, clock=clock))
     engine = engine or build_engine(config, store, registry)
 
     app = Flask(__name__)
@@ -124,7 +127,7 @@ def create_app(
 
     @app.get("/api/health")
     def health():
-        return jsonify(ok=True, engine=engine.name, calendar=config.calendar, tools=registry.names())
+        return jsonify(ok=True, engine=engine.name, calendar=config.calendar, mail=config.mail, tools=registry.names())
 
     @app.get("/api/session/<session_id>")
     def session_state(session_id: str):
@@ -204,5 +207,5 @@ def create_app(
         store.add_transcript(sid, "assistant", f"❌ {action['summary']}")
         return jsonify(ok=True, pending=store.pending_for_session(sid))
 
-    log.info("engine=%s calendar=%s port=%s", engine.name, config.calendar, port)
+    log.info("engine=%s calendar=%s mail=%s port=%s", engine.name, config.calendar, config.mail, port)
     return app

@@ -11,15 +11,13 @@ Events are plain dicts in the Google Calendar format (``summary``, ``start``,
 from __future__ import annotations
 
 import itertools
-import os
-from typing import Optional, Protocol
+from typing import Protocol
 from zoneinfo import ZoneInfo
 
 from .config import Config
-from .errors import EventNotFound, ToolError
+from .errors import EventNotFound
+from .google_auth import build_service, http_status
 from .timeutil import event_bounds, parse_dt
-
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
 class CalendarBackend(Protocol):
@@ -83,11 +81,6 @@ class InMemoryCalendar:
 
 # ---------------------------------------------------------------------------- google
 
-def _status(exc: Exception) -> Optional[int]:
-    status = getattr(getattr(exc, "resp", None), "status", None)
-    return int(status) if status is not None else None
-
-
 class GoogleCalendar:
     """Google Calendar v3 behind the CalendarBackend interface.
 
@@ -102,38 +95,8 @@ class GoogleCalendar:
 
     # -- auth ----------------------------------------------------------------
     def authorize(self, interactive: bool = False):
-        try:
-            from google.auth.transport.requests import Request
-            from google.oauth2.credentials import Credentials
-            from google_auth_oauthlib.flow import InstalledAppFlow
-            from googleapiclient.discovery import build
-        except ImportError:
-            raise ToolError("Google libraries are missing. Install them: pip install 'calendar-agent[google]'") from None
-
-        token_file, secrets_file = self.config.token_file, self.config.credentials_file
-        creds = Credentials.from_authorized_user_file(str(token_file), SCOPES) if token_file.exists() else None
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            self._save_token(creds)
-        elif not creds or not creds.valid:
-            if not interactive:
-                raise ToolError("Google Calendar is not authorised yet. Ask the user to run `calendar-agent auth` "
-                                "in a terminal once.")
-            if not secrets_file.exists():
-                raise ToolError(f"Missing {secrets_file}. Download the OAuth client JSON from Google Cloud Console "
-                                "(see README) and save it there.")
-            flow = InstalledAppFlow.from_client_secrets_file(str(secrets_file), SCOPES)
-            creds = flow.run_local_server(port=0)
-            self._save_token(creds)
-        self._service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        self._service = build_service(self.config, "calendar", "v3", interactive)
         return self._service
-
-    def _save_token(self, creds) -> None:
-        path = self.config.token_file
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # owner-only: it is a credential
-        with os.fdopen(fd, "w") as handle:
-            handle.write(creds.to_json())
 
     @property
     def service(self):
@@ -160,7 +123,7 @@ class GoogleCalendar:
         try:
             return self.service.events().get(calendarId="primary", eventId=event_id).execute()
         except Exception as exc:  # noqa: BLE001
-            if _status(exc) in (404, 410):
+            if http_status(exc) in (404, 410):
                 raise EventNotFound(event_id) from None
             raise
 
@@ -171,7 +134,7 @@ class GoogleCalendar:
         try:
             return self.service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
         except Exception as exc:  # noqa: BLE001
-            if _status(exc) in (404, 410):
+            if http_status(exc) in (404, 410):
                 raise EventNotFound(event_id) from None
             raise
 
@@ -179,7 +142,7 @@ class GoogleCalendar:
         try:
             self.service.events().delete(calendarId="primary", eventId=event_id).execute()
         except Exception as exc:  # noqa: BLE001
-            if _status(exc) in (404, 410):
+            if http_status(exc) in (404, 410):
                 raise EventNotFound(event_id) from None
             raise
 

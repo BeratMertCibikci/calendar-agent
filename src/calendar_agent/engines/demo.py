@@ -20,7 +20,10 @@ HELP = """I am the demo engine: no AI, just keyword rules. Try:
 - delete evt1  (asks for approval)
 - task Buy train ticket / tasks / done 1
 - remember Meetings last 90 minutes
-- search PSG Le Mans kick-off"""
+- search PSG Le Mans kick-off
+- mail [gmail query]  (needs MAIL_BACKEND=memory or gmail) / read m1
+- reply m1 | Thursday 15:00 works for me.  (makes a draft, asks approval)
+- draft a@b.com | Subject | Body text"""
 
 _ADD = re.compile(r"^add\s+(?P<title>.+?)\s+on\s+(?P<day>\d{4}-\d{2}-\d{2})\s+(?P<hm>\d{1,2}:\d{2})"
                   r"(?:\s+for\s+(?P<mins>\d+)\s*(?:min|minutes)?)?$", re.IGNORECASE)
@@ -72,6 +75,18 @@ class DemoEngine(BaseEngine):
             return call("complete_task", task_id=text[5:].strip())
         if lower.startswith("remember "):
             return call("remember", fact=text[9:])
+        if lower == "mail" or lower.startswith("mail "):
+            return call("search_mail", query=text[5:])
+        if lower.startswith("read "):
+            return call("read_mail", message_id=text[5:].strip())
+        if lower.startswith("reply "):
+            ident, sep, body = text[6:].partition("|")
+            return call("draft_email", reply_to_message_id=ident.strip(), body=body.strip()) if sep else \
+                "Usage: reply <id> | <your text>"
+        if lower.startswith("draft "):
+            parts = [p.strip() for p in text[6:].split("|", 2)]
+            return call("draft_email", to=parts[0], subject=parts[1], body=parts[2]) if len(parts) == 3 else \
+                "Usage: draft <to> | <subject> | <text>"
         if lower.startswith("search "):
             return call("web_search", query=text[7:])
         return "I did not understand that. Type 'help' for the commands I know."

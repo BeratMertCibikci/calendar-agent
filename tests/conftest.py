@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from calendar_agent.calendar_backends import InMemoryCalendar
+from calendar_agent.mail_backends import InMemoryMail
 from calendar_agent.config import Config
 from calendar_agent.context import Context, init_context, reset_context
 from calendar_agent.db import Store
@@ -17,7 +18,7 @@ NOW = datetime(2026, 11, 10, 9, 0, tzinfo=TZ)
 
 @pytest.fixture
 def config(tmp_path):
-    return Config.from_env({"ENGINE": "demo", "CALENDAR_BACKEND": "memory", "DATA_DIR": str(tmp_path),
+    return Config.from_env({"ENGINE": "demo", "CALENDAR_BACKEND": "memory", "MAIL_BACKEND": "memory", "DATA_DIR": str(tmp_path),
                             "ICS_ALLOWED_DIRS": str(tmp_path)})
 
 
@@ -32,8 +33,13 @@ def calendar(config):
 
 
 @pytest.fixture
-def ctx(config, store, calendar):
-    c = init_context(Context(config=config, store=store, calendar=calendar, clock=lambda: NOW))
+def mail():
+    return InMemoryMail()
+
+
+@pytest.fixture
+def ctx(config, store, calendar, mail):
+    c = init_context(Context(config=config, store=store, calendar=calendar, mail=mail, clock=lambda: NOW))
     yield c
     reset_context()
 
@@ -46,9 +52,9 @@ def call(ctx):
 
 
 @pytest.fixture
-def client(config, store, calendar):
+def client(config, store, calendar, mail):
     from calendar_agent.server import create_app
-    app = create_app(config, store=store, calendar=calendar, clock=lambda: NOW)
+    app = create_app(config, store=store, calendar=calendar, mail=mail, clock=lambda: NOW)
     c = app.test_client()
     html = c.get("/").get_data(as_text=True)
     token = re.search(r'csrf-token" content="([^"]+)', html).group(1)

@@ -16,3 +16,8 @@ class EventNotFound(ToolError):
 
 class EngineUnavailable(Exception):
     """The LLM backend could not answer (overloaded, unreachable, all models failed)."""
+
+
+class MailNotFound(ToolError):
+    def __init__(self, message_id: str):
+        super().__init__(f"Message not found: {message_id}. Use search_mail to find a valid id.")

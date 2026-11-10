@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 ENGINES = ("gemini", "ollama", "demo")
 CALENDARS = ("google", "memory")
+MAIL_BACKENDS = ("none", "gmail", "memory")
 LANGUAGES = {"tr": "Turkish", "en": "English", "fr": "French"}
 # Tried in order. Model names are retired regularly, so the engine falls through the list.
 DEFAULT_GEMINI_MODELS = ("gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash")
@@ -42,6 +43,7 @@ def _bool(env: Mapping[str, str], key: str, default: bool = False) -> bool:
 class Config:
     engine: str = "gemini"
     calendar: str = "google"
+    mail: str = "none"
     gemini_models: tuple = DEFAULT_GEMINI_MODELS
     ollama_model: str = "qwen2.5:14b"
     timezone: str = "Europe/Paris"
@@ -90,6 +92,10 @@ class Config:
         if calendar not in CALENDARS:
             raise ConfigError(f"CALENDAR_BACKEND must be one of {CALENDARS}, got {calendar!r}")
 
+        mail = env.get("MAIL_BACKEND", "none").strip().lower() or "none"
+        if mail not in MAIL_BACKENDS:
+            raise ConfigError(f"MAIL_BACKEND must be one of {MAIL_BACKENDS}, got {mail!r}")
+
         timezone = env.get("TIMEZONE", "Europe/Paris").strip() or "Europe/Paris"
         try:
             ZoneInfo(timezone)
@@ -112,6 +118,7 @@ class Config:
         return cls(
             engine=engine,
             calendar=calendar,
+            mail=mail,
             gemini_models=models,
             ollama_model=env.get("OLLAMA_MODEL", "").strip() or "qwen2.5:14b",
             timezone=timezone,

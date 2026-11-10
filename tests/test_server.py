@@ -106,3 +106,13 @@ def test_notice_prefix_is_hidden_from_demo_engine(client):
     aid = chat(client, "delete evt1").get_json()["pending"][0]["id"]
     client.jpost(f"/api/actions/{aid}/reject", {"session_id": client.sid})
     assert "Created" in chat(client, "add Next on 2026-11-13 10:00").get_json()["reply"]
+
+
+def test_mail_flow_through_demo_engine(client, mail):
+    mail.add("Claire <claire@corp.com>", "Entretien", "Jeudi 15h ?")
+    assert "Entretien" in chat(client, "mail").get_json()["reply"]
+    assert "Jeudi 15h" in chat(client, "read m1").get_json()["reply"]
+    body = chat(client, "reply m1 | Oui, jeudi me convient.").get_json()
+    assert len(body["pending"]) == 1 and "claire@corp.com" in body["pending"][0]["summary"] and mail.drafts == []
+    ok = client.jpost(f"/api/actions/{body['pending'][0]['id']}/approve", {"session_id": client.sid})
+    assert ok.status_code == 200 and "NOTHING was sent" in ok.get_json()["result"] and len(mail.drafts) == 1

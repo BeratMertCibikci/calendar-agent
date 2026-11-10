@@ -13,6 +13,7 @@ It runs with a cloud model (Gemini) or a fully local one (Ollama), and has a key
 - **Human-in-the-loop approval enforced in code.** Tools flagged `requires_approval` are parked in SQLite; the model only sees "waiting for approval". The UI's Approve button executes them. The claim is atomic (no double execution), actions expire after 30 min, and the outcome is fed back to the model on the next message.
 - **Conflict detection** before creating events (adjacent events are fine, all-day/"free" events are ignored) and `find_free_slots`.
 - **Idempotent timetable import** (`.ics`, e.g. a university ADE export): a UID is stored in the event's private extended properties, so re-importing updates changed lessons instead of duplicating them.
+- **Gmail, read-only + drafts** (optional): search and read mail, turn an invitation into an event, prepare reply drafts. It **cannot send**: drafts need an approval click and the user sends them. Mail text is sanitised (invisible characters, hidden HTML) and treated as untrusted. See [Gmail](#gmail-optional).
 - **Photo → event** (Gemini): send a ticket screenshot, it reads date and time.
 - **Persistent memory** of user preferences (bounded: 50 × 300 chars) and tasks.
 - **Two engines + fallbacks**: Gemini with model fallback list and retry/backoff on 429/5xx; Ollama with a bounded manual tool loop.
@@ -63,6 +64,26 @@ calendar-agent auth     # opens a browser once, saves data/token.json (chmod 600
 calendar-agent          # starts the UI on http://127.0.0.1:5001
 ```
 
+### Gmail (optional)
+
+```bash
+# 1. Google Cloud Console: also enable the "Gmail API" for the same project
+# 2. .env:  MAIL_BACKEND=gmail
+calendar-agent auth     # sign in again: it now asks for Gmail read + compose permission
+```
+
+Try it without Gmail: `MAIL_BACKEND=memory` loads a small demo mailbox (including a mail that contains a prompt-injection attempt, to show it is treated as data). Demo-engine commands: `mail`, `read m1`, `reply m1 | text`.
+
+![mail screenshot](docs/screenshot-mail.png)
+<sub>Demo engine, demo mailbox: the reply goes to the original sender, the full draft is shown before anything is created.</sub>
+
+What to know before enabling it:
+
+- **Privacy.** With `ENGINE=gemini`, the text of mails the agent reads is sent to Google's Gemini API. With `ENGINE=ollama` nothing leaves your machine. The agent only reads mail when you ask for it, and caps each message at 6000 characters.
+- **Permissions.** Google has no "drafts only" scope, so the app requests `gmail.readonly` + `gmail.compose`. `compose` technically allows sending, but this code has no send function (a test checks that), so it cannot send even if the model is tricked.
+- **Testing mode.** While the OAuth consent screen is in *Testing*, Google expires refresh tokens after 7 days; just run `calendar-agent auth` again.
+- Gmail query syntax works in `search_mail` (`from:`, `is:unread`, `newer_than:7d`, `has:attachment`).
+
 **Local model**: install [Ollama](https://ollama.com), `ollama pull qwen2.5:14b` (any tool-capable model), set `ENGINE=ollama` and `OLLAMA_MODEL`.
 
 Configuration is via environment variables / `.env`; see [.env.example](.env.example).
@@ -78,6 +99,7 @@ It is a local app that can modify your calendar, so it is built defensively:
 | Malicious website calls `localhost` (CSRF, DNS rebinding) | Host allow-list, Origin check, per-process CSRF token, JSON-only bodies |
 | Model reads arbitrary files via `import_ics` | Path allow-list (`ICS_ALLOWED_DIRS`), `.ics` only, ≤ 5 MB, ≤ 500 events |
 | Memory poisoning | Preference count/length limits, preferences shown to the model as data |
+| Hostile e-mail (prompt injection, hidden text) | No send tool, only drafts; drafts need approval and show recipient + full text; reply recipient comes from the original message; invisible Unicode and `display:none` HTML removed; mail is labelled untrusted |
 | Credential leakage | `token.json` created `0600`; `.env`, `data/`, tokens git-ignored |
 | Exposed by accident | Binds `127.0.0.1`, debug off by default, warning when bound elsewhere |
 
@@ -86,7 +108,7 @@ There is no login: do not expose the port to a network.
 ## Tests
 
 ```bash
-pytest          # 67 tests, no network, no API keys
+pytest          # 97 tests, no network, no API keys
 ```
 
 Engines are tested through seams (`_attempt` for Gemini, `chat_fn` for Ollama, a fake service for Google), so retry/fallback logic, history trimming and the approval flow are covered without the SDKs.
@@ -96,7 +118,10 @@ Engines are tested through seams (`_attempt` for Gemini, `chat_fn` for Ollama, a
 ```
 src/calendar_agent/
   registry.py          tool decorator, schema generation, approval gate
-  tools/               events, schedule (ICS import), tasks + memory, web
+  tools/               events, mail, schedule (ICS import), tasks + memory, web
+  mail_backends.py     Gmail + in-memory (search / read / create draft, no send)
+  mailparse.py        MIME → safe text, hidden-content stripping, draft MIME
+  google_auth.py       one sign-in and token for Calendar + Gmail
   engines/             gemini, ollama, demo
   calendar_backends.py Google + in-memory
   icsparse.py          small .ics reader

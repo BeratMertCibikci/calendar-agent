@@ -41,3 +41,9 @@ def test_action_claim_is_atomic(store):
     aid = store.create_action("sess-0001", "t", {}, "s")
     assert store.claim_action(aid, "sess-0001") is not None
     assert store.claim_action(aid, "sess-0001") is None
+
+
+def test_mail_backend_config():
+    assert Config.from_env({}).mail == "none" and Config.from_env({"MAIL_BACKEND": "Gmail"}).mail == "gmail"
+    with pytest.raises(ConfigError):
+        Config.from_env({"MAIL_BACKEND": "imap"})

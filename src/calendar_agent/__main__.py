@@ -17,6 +17,7 @@ def _parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="start the web UI (default)")
     serve.add_argument("--engine", choices=["gemini", "ollama", "demo"], help="override ENGINE")
     serve.add_argument("--calendar", choices=["google", "memory"], help="override CALENDAR_BACKEND")
+    serve.add_argument("--mail", choices=["none", "gmail", "memory"], help="override MAIL_BACKEND")
     serve.add_argument("--host", help="override HOST (default 127.0.0.1)")
     serve.add_argument("--port", type=int, help="override PORT (default 5001)")
     sub.add_parser("auth", help="sign in to Google Calendar once (opens a browser)")
@@ -35,13 +36,24 @@ def main(argv=None) -> int:
         return 2
 
     if args.command == "auth":
-        from .calendar_backends import GoogleCalendar
-        GoogleCalendar(config).authorize(interactive=True)
-        print(f"Signed in. Token saved to {config.token_file}")
+        from .google_auth import load_credentials, required_scopes
+        scopes = required_scopes(config)
+        if not scopes:
+            print("Nothing to authorise: CALENDAR_BACKEND is not 'google' and MAIL_BACKEND is not 'gmail'.")
+            return 0
+        from .errors import ToolError
+        try:
+            load_credentials(config, interactive=True)
+        except ToolError as exc:
+            print(f"Sign-in failed: {exc}", file=sys.stderr)
+            return 1
+        print("Signed in with access to: " + ", ".join(s.rsplit("/", 1)[-1] for s in scopes))
+        print(f"Token saved to {config.token_file}")
         return 0
 
     overrides = {k: v for k, v in {
         "engine": getattr(args, "engine", None), "calendar": getattr(args, "calendar", None),
+        "mail": getattr(args, "mail", None),
         "host": getattr(args, "host", None), "port": getattr(args, "port", None),
     }.items() if v is not None}
     config = dataclasses.replace(config, **overrides)
@@ -51,7 +63,7 @@ def main(argv=None) -> int:
     if config.host not in ("127.0.0.1", "localhost", "::1"):
         print("WARNING: listening on a non-local address. There is no login: anyone who can reach this port "
               "can use your calendar.", file=sys.stderr)
-    print(f"Open http://{config.host}:{config.port}  (engine={config.engine}, calendar={config.calendar})")
+    print(f"Open http://{config.host}:{config.port}  (engine={config.engine}, calendar={config.calendar}, mail={config.mail})")
     app.run(host=config.host, port=config.port, debug=config.debug, use_reloader=False)
     return 0
 
