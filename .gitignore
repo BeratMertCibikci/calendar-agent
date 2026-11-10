@@ -1,0 +1,29 @@
+# Secrets and personal data: never commit these
+.env
+data/
+credentials.json
+Credentials.json
+token.json
+*.db
+*.db-wal
+*.db-shm
+client_secret*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+server.log

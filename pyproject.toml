@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "calendar-agent"
+version = "0.1.0"
+description = "LLM calendar agent: tool calling, human-in-the-loop approvals, swappable engines (Gemini / Ollama)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "flask>=3.0",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+google = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
+gemini = ["google-genai>=1.0"]
+ollama = ["ollama>=0.4"]
+search = ["ddgs>=9.0"]
+all = [
+  "google-api-python-client>=2.100",
+  "google-auth-oauthlib>=1.2",
+  "google-genai>=1.0",
+  "ollama>=0.4",
+  "ddgs>=9.0",
+]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+calendar-agent = "calendar_agent.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+calendar_agent = ["static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]

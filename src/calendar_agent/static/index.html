@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="__LANG__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="__CSRF__">
+<title>Calendar Agent</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1d1b; --muted: #77756e; --line: #e4e1d8;
+    --accent: #1f5f4a; --accent-ink: #ffffff; --me: #1f5f4a; --me-ink: #fff;
+    --bot: #ffffff; --warn: #fff6e0; --warn-line: #ecd48a; --err: #b3261e;
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141513; --panel: #1c1d1a; --ink: #ecebe5; --muted: #8d8b82; --line: #2c2d29;
+      --accent: #5fbf9a; --accent-ink: #0d1a14; --me: #2a6b55; --me-ink: #fff;
+      --bot: #1f201d; --warn: #2b2616; --warn-line: #5a4c1c; --err: #f2938c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+    border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .01em; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+  header .spacer { flex: 1; }
+  button { font: inherit; cursor: pointer; }
+  .ghost { background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 6px 12px; }
+  .ghost:hover { border-color: var(--accent); }
+  main { flex: 1; overflow-y: auto; padding: 24px 16px; }
+  .col { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 86%; padding: 10px 14px; border-radius: var(--radius); white-space: pre-wrap; word-wrap: break-word; }
+  .msg.user { align-self: flex-end; background: var(--me); color: var(--me-ink); border-bottom-right-radius: 4px; }
+  .msg.assistant { align-self: flex-start; background: var(--bot); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .msg.error { align-self: center; color: var(--err); border: 1px solid var(--err); background: transparent; font-size: 14px; }
+  .msg code { background: rgba(127,127,127,.18); padding: 1px 5px; border-radius: 5px; font-size: 13px; }
+  .msg img { max-width: 220px; border-radius: 10px; display: block; margin-bottom: 6px; }
+  .approval {
+    align-self: stretch; background: var(--warn); border: 1px solid var(--warn-line);
+    border-radius: var(--radius); padding: 12px 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  }
+  .approval .what { flex: 1; min-width: 220px; }
+  .approval .what small { display: block; color: var(--muted); }
+  .approval button { border-radius: 10px; padding: 7px 14px; border: 1px solid var(--line); }
+  .approval .yes { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .approval .no { background: var(--panel); color: var(--ink); }
+  .approval button:disabled { opacity: .5; cursor: default; }
+  .typing { align-self: flex-start; color: var(--muted); font-size: 13px; padding-left: 6px; }
+  .typing span { display: inline-block; animation: blink 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: .2s; } .typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .2 } 40% { opacity: 1 } }
+  .empty { text-align: center; color: var(--muted); margin-top: 12vh; }
+  .empty h2 { color: var(--ink); font-weight: 650; margin-bottom: 6px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+  .chip { background: var(--panel); border: 1px solid var(--line); color: var(--ink); border-radius: 99px; padding: 6px 12px; font-size: 13px; }
+  .chip:hover { border-color: var(--accent); }
+  footer { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 16px; }
+  form { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
+  textarea {
+    flex: 1; resize: none; max-height: 140px; padding: 10px 12px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+  .send { background: var(--accent); color: var(--accent-ink); border: none; border-radius: 12px; padding: 10px 16px; font-weight: 600; }
+  .send:disabled { opacity: .5; }
+  .attach { padding: 9px 11px; }
+  .preview { max-width: 760px; margin: 0 auto 8px; display: none; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .preview img { height: 44px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Calendar Agent</h1>
+  <span class="badge" id="engine">__ENGINE__</span>
+  <span class="spacer"></span>
+  <button class="ghost" id="newchat" type="button"></button>
+</header>
+<main id="main"><div class="col" id="log"></div></main>
+<footer>
+  <div class="preview" id="preview"><img id="previewImg" alt=""><button class="ghost" id="dropImg" type="button">✕</button></div>
+  <form id="form" autocomplete="off">
+    <button class="ghost attach" id="attach" type="button" title="photo">📎</button>
+    <input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+    <textarea id="input" rows="1"></textarea>
+    <button class="send" id="send" type="submit"></button>
+  </form>
+</footer>
+<script>
+"use strict";
+const LANG = "__LANG__";
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+const I18N = {
+  en: { send: "Send", placeholder: "Ask me to add, move or find something…", newChat: "New chat", title: "What should I put in your calendar?",
+        sub: "Type in plain language. Anything destructive waits for your approval.", approve: "Approve", reject: "Reject",
+        needs: "Needs your approval", thinking: "Thinking", failed: "Something went wrong",
+        chips: ["Add a team meeting tomorrow at 14:00", "What do I have this week?", "When am I free on Friday?"] },
+  tr: { send: "Gönder", placeholder: "Bir şey ekle, taşı ya da ara…", newChat: "Yeni sohbet", title: "Takvimine ne ekleyelim?",
+        sub: "Doğal dille yaz. Silme gibi işlemler onayını bekler.", approve: "Onayla", reject: "Reddet",
+        needs: "Onayın gerekiyor", thinking: "Düşünüyor", failed: "Bir şeyler ters gitti",
+        chips: ["Yarın 14:00'e ekip toplantısı ekle", "Bu hafta neler var?", "Cuma günü ne zaman boşum?"] },
+  fr: { send: "Envoyer", placeholder: "Ajoute, déplace ou cherche quelque chose…", newChat: "Nouvelle discussion", title: "Que dois-je ajouter à ton agenda ?",
+        sub: "Écris naturellement. Les actions destructrices attendent ton accord.", approve: "Valider", reject: "Refuser",
+        needs: "Ton accord est requis", thinking: "Réflexion", failed: "Une erreur est survenue",
+        chips: ["Ajoute une réunion d'équipe demain à 14h", "Qu'ai-je cette semaine ?", "Quand suis-je libre vendredi ?"] },
+};
+const T = I18N[LANG] || I18N.en;
+
+const $ = (id) => document.getElementById(id);
+const log = $("log"), main = $("main"), input = $("input"), sendBtn = $("send");
+let image = null, busy = false;
+
+function newId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+function sessionId() {
+  try {
+    let sid = localStorage.getItem("ca_session");
+    if (!sid) { sid = newId(); localStorage.setItem("ca_session", sid); }
+    return sid;
+  } catch { return window.__sid || (window.__sid = newId()); }
+}
+function resetSession() {
+  const sid = newId();
+  try { localStorage.setItem("ca_session", sid); } catch { window.__sid = sid; }
+}
+
+// Safe rendering: escape everything, then allow only `code` and **bold**. Never innerHTML raw model text.
+function renderText(el, text) {
+  el.textContent = "";
+  const parts = String(text).split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g);
+  for (const p of parts) {
+    if (p.startsWith("`") && p.endsWith("`") && p.length > 2) {
+      const c = document.createElement("code"); c.textContent = p.slice(1, -1); el.appendChild(c);
+    } else if (p.startsWith("**") && p.endsWith("**") && p.length > 4) {
+      const b = document.createElement("strong"); b.textContent = p.slice(2, -2); el.appendChild(b);
+    } else { el.appendChild(document.createTextNode(p)); }
+  }
+}
+function scroll() { main.scrollTop = main.scrollHeight; }
+function addMsg(role, text, imgSrc) {
+  const d = document.createElement("div");
+  d.className = "msg " + role;
+  if (imgSrc) { const i = document.createElement("img"); i.src = imgSrc; i.alt = ""; d.appendChild(i); }
+  const span = document.createElement("span"); renderText(span, text); d.appendChild(span);
+  log.appendChild(d); scroll(); return d;
+}
+function showEmpty() {
+  const e = document.createElement("div"); e.className = "empty"; e.id = "empty";
+  const h = document.createElement("h2"); h.textContent = T.title;
+  const p = document.createElement("div"); p.textContent = T.sub;
+  const chips = document.createElement("div"); chips.className = "chips";
+  for (const c of T.chips) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = c;
+    b.onclick = () => { input.value = c; send(); }; chips.appendChild(b);
+  }
+  e.append(h, p, chips); log.appendChild(e);
+}
+function clearEmpty() { const e = $("empty"); if (e) e.remove(); }
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: body === undefined ? {} : { "Content-Type": "application/json", "X-CSRF-Token": CSRF },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await res.json(); } catch { /* non-JSON error */ }
+  if (!res.ok) throw new Error(data.error || (T.failed + " (" + res.status + ")"));
+  return data;
+}
+
+function renderPending(list) {
+  document.querySelectorAll(".approval").forEach((n) => n.remove());
+  for (const a of list) {
+    const box = document.createElement("div"); box.className = "approval"; box.dataset.id = a.id;
+    const what = document.createElement("div"); what.className = "what";
+    const small = document.createElement("small"); small.textContent = T.needs;
+    const strong = document.createElement("strong"); strong.textContent = a.summary;
+    what.append(small, strong);
+    const yes = document.createElement("button"); yes.className = "yes"; yes.textContent = T.approve;
+    const no = document.createElement("button"); no.className = "no"; no.textContent = T.reject;
+    const act = async (kind) => {
+      yes.disabled = no.disabled = true;
+      try {
+        const r = await api("/api/actions/" + a.id + "/" + kind, { session_id: sessionId() });
+        if (kind === "approve") addMsg("assistant", (r.ok ? "✅ " : "⚠️ ") + r.result);
+        else addMsg("assistant", "❌ " + a.summary);
+        renderPending(r.pending || []);
+      } catch (e) { addMsg("error", e.message); await refresh(); }
+    };
+    yes.onclick = () => act("approve"); no.onclick = () => act("reject");
+    box.append(what, no, yes); log.appendChild(box);
+  }
+  scroll();
+}
+
+async function refresh() {
+  log.textContent = "";
+  try {
+    const s = await api("/api/session/" + sessionId());
+    if (!s.transcript.length && !s.pending.length) showEmpty();
+    for (const m of s.transcript) addMsg(m.role, m.text + (m.has_image ? " 📷" : ""));
+    renderPending(s.pending);
+  } catch (e) { showEmpty(); addMsg("error", e.message); }
+}
+
+async function send() {
+  const text = input.value.trim();
+  if ((!text && !image) || busy) return;
+  busy = true; sendBtn.disabled = true; clearEmpty();
+  const shownImg = image ? "data:" + image.mime_type + ";base64," + image.data : null;
+  addMsg("user", text, shownImg);
+  const payload = { session_id: sessionId(), message: text, image };
+  input.value = ""; autosize(); clearImage();
+  const typing = document.createElement("div"); typing.className = "typing";
+  typing.innerHTML = T.thinking + " <span>●</span><span>●</span><span>●</span>";
+  log.appendChild(typing); scroll();
+  try {
+    const r = await api("/api/chat", payload);
+    typing.remove(); addMsg("assistant", r.reply); renderPending(r.pending || []);
+  } catch (e) { typing.remove(); addMsg("error", e.message); }
+  finally { busy = false; sendBtn.disabled = false; input.focus(); }
+}
+
+// Downscale photos in the browser so uploads stay small and fast.
+function loadImage(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const dataUrl = c.toDataURL("image/jpeg", 0.85);
+    image = { mime_type: "image/jpeg", data: dataUrl.split(",")[1] };
+    $("previewImg").src = dataUrl; $("preview").style.display = "flex";
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); addMsg("error", "Could not read this image."); };
+  img.src = url;
+}
+function clearImage() { image = null; $("preview").style.display = "none"; $("file").value = ""; }
+function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 140) + "px"; }
+
+$("form").addEventListener("submit", (e) => { e.preventDefault(); send(); });
+input.addEventListener("input", autosize);
+input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+$("attach").onclick = () => $("file").click();
+$("file").onchange = (e) => loadImage(e.target.files[0]);
+$("dropImg").onclick = clearImage;
+$("newchat").onclick = () => { resetSession(); clearImage(); refresh(); };
+input.addEventListener("paste", (e) => {
+  const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/"));
+  if (f) { e.preventDefault(); loadImage(f); }
+});
+
+$("newchat").textContent = T.newChat; sendBtn.textContent = T.send; input.placeholder = T.placeholder;
+refresh();
+</script>
+</body>
+</html>
