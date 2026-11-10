@@ -18,6 +18,7 @@ It runs with a cloud model (Gemini) or a fully local one (Ollama), and has a key
 - **Persistent memory** of user preferences (bounded: 50 × 300 chars) and tasks.
 - **Two engines + fallbacks**: Gemini with model fallback list and retry/backoff on 429/5xx; Ollama with a bounded manual tool loop.
 - Web search whose results are marked as untrusted data (prompt-injection mitigation).
+- Desktop app: `calendar-agent app` opens a native window (pywebview); a script builds a macOS `.app`.
 - UI: single page, no build step, light/dark, EN/TR/FR, approval cards, session restore, client-side image downscaling.
 
 ## Architecture
@@ -84,6 +85,15 @@ What to know before enabling it:
 - **Testing mode.** While the OAuth consent screen is in *Testing*, Google expires refresh tokens after 7 days; just run `calendar-agent auth` again.
 - Gmail query syntax works in `search_mail` (`from:`, `is:unread`, `newer_than:7d`, `has:attachment`).
 
+### Desktop app
+
+```bash
+pip install -e ".[all]"
+calendar-agent app          # own window instead of a browser tab; closing it stops the server
+```
+
+Settings and data for the app live in a per-user folder (macOS: `~/Library/Application Support/Calendar Agent/`; put your `.env` and `credentials.json` there). To get a double-clickable macOS app with a Dock icon, run `./scripts/build_app.sh` on a Mac (PyInstaller), then drag `dist/Calendar Agent.app` to Applications. Google sign-in is still the one-time `calendar-agent auth` (with `DATA_DIR` pointing at that folder).
+
 **Local model**: install [Ollama](https://ollama.com), `ollama pull qwen2.5:14b` (any tool-capable model), set `ENGINE=ollama` and `OLLAMA_MODEL`.
 
 Configuration is via environment variables / `.env`; see [.env.example](.env.example).
@@ -108,7 +118,7 @@ There is no login: do not expose the port to a network.
 ## Tests
 
 ```bash
-pytest          # 97 tests, no network, no API keys
+pytest          # 103 tests, no network, no API keys
 ```
 
 Engines are tested through seams (`_attempt` for Gemini, `chat_fn` for Ollama, a fake service for Google), so retry/fallback logic, history trimming and the approval flow are covered without the SDKs.
@@ -127,6 +137,7 @@ src/calendar_agent/
   icsparse.py          small .ics reader
   db.py                SQLite store (history, tasks, memory, pending actions)
   server.py            Flask app + security checks
+  desktop.py           native window (pywebview) around the same server
   static/index.html    UI
 tests/  docs/DESIGN_NOTES.md
 ```
@@ -135,6 +146,7 @@ tests/  docs/DESIGN_NOTES.md
 
 - Single user, single calendar (`primary`). No recurring-event expansion for conflict checks.
 - The Gemini, Ollama and Google paths are covered by fakes in CI; they need a manual run against the real services before relying on them.
+- The desktop window and the PyInstaller build were tested with a stand-in for pywebview in CI; opening a real window and building the `.app` need a manual run on a Mac.
 - Ideas: streaming replies, Apple Calendar (CalDAV) backend, multiple calendars, voice input.
 
 ## License

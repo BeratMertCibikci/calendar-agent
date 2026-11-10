@@ -19,12 +19,15 @@ google = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
 gemini = ["google-genai>=1.0"]
 ollama = ["ollama>=0.4"]
 search = ["ddgs>=9.0"]
+app = ["pywebview>=5.0"]
+bundle = ["pywebview>=5.0", "pyinstaller>=6.0"]
 all = [
   "google-api-python-client>=2.100",
   "google-auth-oauthlib>=1.2",
   "google-genai>=1.0",
   "ollama>=0.4",
   "ddgs>=9.0",
+  "pywebview>=5.0",
 ]
 dev = ["pytest>=8", "ruff>=0.5"]
 

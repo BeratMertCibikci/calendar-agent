@@ -39,7 +39,11 @@ class GeminiEngine(BaseEngine):
                 from google import genai
             except ImportError:
                 raise EngineUnavailable("Gemini SDK missing. Install it: pip install 'calendar-agent[gemini]'") from None
-            self._client = genai.Client()  # reads GEMINI_API_KEY / GOOGLE_API_KEY
+            try:
+                self._client = genai.Client()  # reads GEMINI_API_KEY / GOOGLE_API_KEY
+            except ValueError:  # the SDK raises this when no key is configured
+                raise EngineUnavailable("No Gemini API key found. Add GEMINI_API_KEY=... to the .env file (the desktop app "
+                                        f"reads {self.config.data_dir / '.env'}), or use ENGINE=ollama / ENGINE=demo.") from None
         return self._client
 
     def _attempt(self, model: str, system: str, past: list, message: str, image: Optional[dict]):
