@@ -44,7 +44,7 @@ The model never talks to Google directly: every capability is a function in `too
 ## Quick start (no keys needed)
 
 ```bash
-git clone <this repo> && cd calendar-agent
+git clone https://github.com/BeratMertCibikci/calendar-agent.git && cd calendar-agent
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ENGINE=demo CALENDAR_BACKEND=memory calendar-agent
